@@ -10,6 +10,8 @@ Three sources today, dispatched on yaml ``artifacts_path.task_data_source``:
   ``"hf://<dataset>"``       HuggingFace Hub (STUB)
   ``"local:<host_dir>"``     docker cp from a HOST dir — for a data-less Docker
                              image: input before the agent, reference before eval
+  ``"mounted:<sandbox_dir>"`` cp from a dir already visible INSIDE the sandbox
+                             (e.g. a read-only HF bucket mounted by hfsandbox)
 
 Each backend module exposes two coroutines:
 
@@ -57,11 +59,14 @@ def select(task_data_source: str):
     if task_data_source.startswith("local:"):
         from . import local_host
         return local_host
+    if task_data_source.startswith("mounted:"):
+        from . import mounted
+        return mounted
     raise ValueError(
         f"unknown task_data_source {task_data_source!r}: expected "
         f"'baked_in_sandbox', 'gs://<bucket>', 's3://<bucket>', 'oss://<bucket>', "
         f"'hf://<dataset>', "
-        f"or 'local:<dir>'"
+        f"'local:<dir>', or 'mounted:<sandbox_dir>'"
     )
 
 
@@ -94,4 +99,4 @@ def shell_q(sandbox: SandboxHandle, path: str) -> str:
     return shlex.quote(path) if sandbox.is_linux else f"'{path}'"
 
 
-__all__ = ["select", "task_subdir", "join", "shell_q"]
+__all__ = ["join", "select", "shell_q", "task_subdir"]

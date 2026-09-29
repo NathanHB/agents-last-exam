@@ -1,0 +1,26 @@
+# Hugging Face Sandboxes provider — one dedicated HF Sandbox (an HF Job running
+# the published `agentslastexam/ale-ubuntu22-docker` image) per run unit.
+# Linux-only (same subset as the Docker provider). Needs a HF token with the
+# `jobs` scope (`hf auth login` or HF_TOKEN). The orchestrator can run anywhere
+# with outbound HTTPS — a laptop or another HF Job — no local Docker needed.
+provider: hfsandbox
+
+image: ale-ubuntu22-docker        # -> agentslastexam/ale-ubuntu22-docker:latest
+flavor: cpu-upgrade               # 8 vCPU / 32 GB; see `hf jobs hardware`
+transport: job                    # job = HF Job + exposed port (default) | sandbox = HF Sandbox API port-proxy (buggy 2026-09)
+job_timeout: 24h                  # (job) hard cap; the run kills the job on release anyway
+idle_timeout: 3600                # (sandbox) self-terminate after 1h idle
+start_timeout: 1800               # cold image pull of the ~40 GB image can take 10-15 min
+resolution: [1024, 768]
+# namespace: my-org               # bill sandboxes to an org instead of the token owner
+
+# Task data. The image ships without it. Extract the gated
+# agents-last-exam/agents-last-exam-data-archive tarball once into a PRIVATE
+# bucket (layout <domain>/<task>/<variant>/{input,software,reference}), mount it
+# read-only into every sandbox job, and stage per task from the mount:
+volumes:
+  - hf://buckets/SaylorTwift/ale-task-data:/mnt/ale-task-data:ro
+task_data_source: mounted:/mnt/ale-task-data
+# For data-less tasks only (demo/tool_smoke) you can drop `volumes` and use
+# task_data_source: baked_in_sandbox
+output_path: local
