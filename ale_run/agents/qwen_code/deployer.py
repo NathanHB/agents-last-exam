@@ -36,7 +36,7 @@ Headless invocation::
   {"name":...,"description":...}}`` with NO ``parameters`` key at all (every
   other built-in tool includes one correctly, even when empty). The HF
   router's strict request deserializer rejects the ENTIRE request with a
-  422 (``tools[N].function: missing field \`parameters\```) the instant it
+  422 (``tools[N].function: missing field 'parameters'``) the instant it
   reaches either tool's entry, killing every turn from that point on --
   confirmed via ``--openai-logging`` (4/4 identical local repeats hit it
   with both tools present; 4/4 clean with them excluded). This is a genuine
