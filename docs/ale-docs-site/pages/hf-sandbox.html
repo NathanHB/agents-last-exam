@@ -48,19 +48,27 @@ uv sync --all-packages</code></pre>
     <p>
       The image ships without task inputs or references. Request access to the
       <a href="https://huggingface.co/datasets/agents-last-exam/agents-last-exam-data-archive">ALE
-      task-data archive</a>, extract it once into a bucket you own (layout
-      <code>&lt;domain&gt;/&lt;task&gt;/&lt;variant&gt;/{input,software,reference}</code>),
-      and mount that bucket read-only into every sandbox job.
+      task-data archive</a>, then:
+    </p>
+    <pre><code>hf download agents-last-exam/agents-last-exam-data-archive \
+  ale-tasks-data.tar.gz --repo-type dataset
+tar xzf ale-tasks-data.tar.gz -C task-data
+hf buckets create &lt;namespace&gt;/&lt;bucket&gt; --private
+hf buckets sync task-data hf://buckets/&lt;namespace&gt;/&lt;bucket&gt;</code></pre>
+    <p>
+      That uploads the extracted
+      <code>&lt;domain&gt;/&lt;task&gt;/&lt;variant&gt;/{input,software,reference}</code>
+      tree to a bucket you own, ready to mount read-only into every sandbox job.
     </p>
 
     <h2>Use the shipped environment</h2>
     <pre><code>environment: configs/environments/hfsandbox.yaml
 tasks: selected_tasks/docker_support.txt</code></pre>
     <p>
-      Point <code>volumes</code> at your own bucket before running:
+      Point <code>volumes</code> at that bucket before running:
     </p>
     <pre><code>volumes:
-  - hf://buckets/&lt;your-namespace&gt;/&lt;your-bucket&gt;:/mnt/ale-task-data:ro
+  - hf://buckets/&lt;namespace&gt;/&lt;bucket&gt;:/mnt/ale-task-data:ro
 task_data_source: mounted:/mnt/ale-task-data</code></pre>
     <p>
       For data-less tasks only (<code>demo</code>, <code>tool_smoke</code>) you
