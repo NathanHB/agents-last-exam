@@ -14,12 +14,19 @@ start_timeout: 1800               # cold image pull of the ~40 GB image can take
 resolution: [1024, 768]
 # namespace: my-org               # bill sandboxes to an org instead of the token owner
 
-# Task data. The image ships without it. Extract the gated
-# agents-last-exam/agents-last-exam-data-archive tarball once into a PRIVATE
-# bucket (layout <domain>/<task>/<variant>/{input,software,reference}), mount it
-# read-only into every sandbox job, and stage per task from the mount:
+# Task data setup (one-time, the image ships without it):
+#   1. Request access, then download the gated dataset:
+#        hf download agents-last-exam/agents-last-exam-data-archive \
+#          ale-tasks-data.tar.gz --repo-type dataset
+#   2. Extract it (layout: <domain>/<task>/<variant>/{input,software,reference})
+#      and upload the tree to your own private bucket:
+#        hf buckets create <namespace>/<bucket> --private
+#        hf buckets sync <extracted-dir> hf://buckets/<namespace>/<bucket>
+#   3. Point `volumes` at that bucket. HF Jobs mounts it read-only into every
+#      sandbox job at the given path, and `task_data_source: mounted:<path>`
+#      copies each task's files out of it.
 volumes:
-  - hf://buckets/SaylorTwift/ale-task-data:/mnt/ale-task-data:ro
+  - hf://buckets/<namespace>/<bucket>:/mnt/ale-task-data:ro
 task_data_source: mounted:/mnt/ale-task-data
 # For data-less tasks only (demo/tool_smoke) you can drop `volumes` and use
 # task_data_source: baked_in_sandbox
