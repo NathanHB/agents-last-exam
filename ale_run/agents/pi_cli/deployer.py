@@ -111,7 +111,7 @@ class PiCliDeployer(BaseAgentDeployer):
                         "baseUrl": cfg.base_url,
                         "api": "openai-completions",
                         "apiKey": key,
-                        "models": [{"id": cfg.model}],
+                        "models": [{"id": cfg.model, "maxTokens": cfg.max_tokens}],
                     },
                 },
             }
