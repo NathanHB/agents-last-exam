@@ -62,14 +62,20 @@ hf buckets sync task-data hf://buckets/&lt;namespace&gt;/&lt;bucket&gt;</code></
     </p>
 
     <h2>Use the shipped environment</h2>
-    <pre><code>environment: configs/environments/hfsandbox.yaml
-tasks: selected_tasks/docker_support.txt</code></pre>
     <p>
-      Point <code>volumes</code> at that bucket before running:
+      Point <code>volumes</code> at that bucket in
+      <code>configs/environments/hfsandbox.yaml</code>:
     </p>
     <pre><code>volumes:
   - hf://buckets/&lt;namespace&gt;/&lt;bucket&gt;:/mnt/ale-task-data:ro
 task_data_source: mounted:/mnt/ale-task-data</code></pre>
+    <p>
+      then run the premade example, which wires
+      <code>configs/agents/openhands_cli_hf.yaml</code> (GLM-5.3 via the HF
+      router) to this environment over
+      <code>selected_tasks/docker_support.txt</code>:
+    </p>
+    <pre><code>uv run python -m ale_run run example_hfsandbox_exp.yaml</code></pre>
     <p>
       For data-less tasks only (<code>demo</code>, <code>tool_smoke</code>) you
       can drop <code>volumes</code> and use
