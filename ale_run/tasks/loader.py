@@ -27,7 +27,7 @@ from ..base_interface import TaskDataSpec
 # delay the import to the one site that needs it, and only when the
 # task_card actually declares a machineType.
 
-__all__ = ["TaskDataSpec", "TaskLoader"]
+__all__ = ["TaskDataSpec", "TaskLoader", "list_tasks"]
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,28 @@ _TASK_LOCAL_MODULE_NAMES = (
 )
 
 _TASK_IMPORT_LOCK = threading.Lock()
+
+
+def list_tasks(root: str | os.PathLike[str] = "tasks") -> list[str]:
+    """Discover task directories under ``root``.
+
+    A task is any directory containing a ``main.py``. Returned paths are
+    relative to ``root`` with ``/`` separators (e.g. ``"demo/hello"``), i.e.
+    exactly the form used in ``selected_tasks/*.txt`` and experiment yamls,
+    and sorted. Hidden dirs and ``__pycache__`` are skipped. A missing root
+    yields an empty list.
+    """
+    root_path = Path(root)
+    if not root_path.is_dir():
+        return []
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        dirnames[:] = sorted(
+            d for d in dirnames if not d.startswith(".") and d != "__pycache__"
+        )
+        if "main.py" in filenames and Path(dirpath) != root_path:
+            found.append(Path(dirpath).relative_to(root_path).as_posix())
+    return sorted(found)
 
 
 # ======================================================================
