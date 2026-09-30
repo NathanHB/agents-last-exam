@@ -1,0 +1,49 @@
+# USAGE: this preset is verified working (real HF Jobs sandbox run, real
+# GUI tool execution, real model responses). Reference it directly:
+#   agents: [ configs/agents/zcode_hf.yaml ]
+# ZCode (Z.ai's own coding-agent CLI, https://github.com/zai-org/ZCode) has
+# no published npm package -- every install builds it from source (clone +
+# pnpm install + pnpm build), which is a real per-run cost (single-digit
+# minutes), not a one-time one. See ale_run/agents/zcode/deployer.py's
+# module docstring for the full build pipeline and the provider-config JSON
+# shapes this preset relies on. There is no LiteLLM layer and no --model CLI
+# flag: routing is entirely file-based (a custom "openai-chat-completions"
+# provider + a defaultModelSelection written to disk by the deployer at
+# install time).
+#
+# BACKGROUND (2026-09-23): first integration of this harness. Three bugs
+# were found and fixed to get a real sandbox run to complete rather than
+# error out:
+#   1. @zcode/cli's headless-browser feature pulls in `electron` as a
+#      transitive dependency; its postinstall downloads a large prebuilt
+#      binary and reliably ETIMEDOUTs, failing the *entire* `pnpm install`
+#      even though the browser feature is never used in headless mode.
+#      Fixed with ELECTRON_SKIP_BINARY_DOWNLOAD=1 on the install/build env.
+#   2. `pnpm --filter @zcode/cli build` (bare) only builds @zcode/cli's own
+#      package, not its ~16 workspace dependencies (@zcode/i18n,
+#      @zcode/core, etc.), and fails immediately with "Could not resolve
+#      @zcode/i18n". Needs the trailing "..." (`--filter @zcode/cli...`) to
+#      build the whole dependency graph in topological order first.
+#   3. The personal provider config's "group" field is optional at *parse*
+#      time (personalProviderConfigRuleSchema) but required at *registry*
+#      validation time -- omitting it silently drops the whole provider from
+#      the registry with no visible error beyond the CLI's generic
+#      "Select a model before continuing" on every turn. Fixed by setting
+#      "group": "standard-personal" on the personal provider config.
+# Verified via a real run (demo/hello): status=completed, 4270 raw NDJSON
+# events -> 237 trajectory steps after parse_artifacts (59 real tool calls:
+# Read/Bash launching Chrome/CUA GUI automation, 59 tool results, 21
+# agent text/reasoning turns, real per-request token usage). Score was 0.0
+# because the model misread the GUI-generated confirmation code (a genuine
+# model-capability miss on this task, not a harness defect) -- same class of
+# caveat as codex/claude_code's demo/tool_smoke note above. If
+# Qwen/Qwen3.5-9B turns out incompatible with this endpoint the way it was
+# with claude_code (see claude_code_hf.yaml's BACKGROUND -- a third-party
+# proxy Space mangling this specific model's output), the documented
+# fallback is openai/gpt-oss-20b, same as that preset.
+harness: zcode
+model: Qwen/Qwen3.5-9B
+config:
+  provider_id: hf-router
+  base_url: https://router.huggingface.co/v1
+  api_key: ${env:HF_TOKEN}
