@@ -1,0 +1,101 @@
+# USAGE: this preset is verified working (real HF Jobs sandbox run,
+# real CUA GUI tool execution, real write_file tool calls). Reference it
+# directly:
+#   agents: [ configs/agents/qwen_code_hf.yaml ]
+# Qwen Code (QwenLM's own coding-agent CLI, https://github.com/QwenLM/qwen-code)
+# is published on npm (@qwen-code/qwen-code) -- a normal `npm install -g`,
+# no from-source build (unlike zcode). Auth/model routing is entirely
+# env-var driven (OPENAI_API_KEY / OPENAI_MODEL / OPENAI_BASE_URL set
+# together auto-infer AuthType.USE_OPENAI -- see
+# ale_run/agents/qwen_code/deployer.py's module docstring), no config file
+# to write and no LiteLLM layer.
+#
+# BACKGROUND (2026-09-23): first integration of this harness. Verified via
+# real local runs against this exact endpoint (plain text response, and a
+# tool-calling run: real read_file tool_use + tool_result content blocks,
+# real per-turn token usage) before being wired into ALE. The CLI's
+# --output-format stream-json wire shape intentionally mirrors Claude
+# Code's own (the project states explicit feature-parity-with-Claude-Code
+# as a design goal) -- system/init, assistant/user turns with
+# text/thinking/tool_use/tool_result content blocks, a final result line
+# with cumulative usage.
+#
+# Verified with a real HF Jobs sandbox run (demo/hello): status=completed,
+# 189s (fast -- npm install of a published package, no from-source build
+# like zcode), real usage (39 trajectory steps, ~236K total tokens). The
+# CUA GUI MCP bridge worked cleanly end-to-end -- real Chrome launch via
+# run_shell_command, then mcp__cua__screenshot/click/type/wait in sequence,
+# correctly reading the on-screen confirmation code. Score was 0.0 not
+# because of a wrong answer (it read the code right) but because the run
+# ended after the model's last message ("let me write this code to the
+# output file") with no corresponding write_file call following it --
+# ran out of turn/time budget one step short of finishing. Same class of
+# caveat as codex/claude_code/zcode's demo/tool_smoke notes above, not a
+# harness defect.
+#
+# FIXED BUG (2026-09-24): the initial 22-task fast-subset benchmark run
+# scored near-zero (mean ~0.04, vs ~0.09-0.27 for every other harness on
+# the same model/tasks). Root cause was a real deployer bug, NOT a model
+# limitation -- do not re-diagnose this as "model reverts to a broken
+# tool-call dialect" without first checking raw traffic (see below for why
+# that looked plausible but was wrong. Traced with `--openai-logging`
+# (captures the literal outgoing OpenAI-wire request/response): the
+# deployer was passing `--bare`, which was believed to only suppress
+# ambient extension/IDE-companion noise (see the `--bare` note that used
+# to be here) -- but it ALSO silently drops core built-in tools, including
+# `write_file`, `glob`, `grep_search`, `skill`, `tool_search`, from the
+# `tools` array actually sent to the model. Confirmed via the captured
+# request JSON: under `--bare` the tool list was only
+# [edit, get_goal, notebook_edit, read_file, run_shell_command,
+# update_goal] -- no write_file at all. But qwen-code's own system-prompt
+# few-shot examples (packages/core/src/core/prompts.ts) reference
+# `write_file` by name regardless of `--bare`, so the model (which "knows"
+# write_file should exist) emitted a textual pseudo-tool-call
+# (`<function=write_file>\n<parameter=file_path>...`) that nothing parses
+# back into a real call -- the turn just dead-ends with unactionable text.
+# This looked exactly like "the model degrades into a broken XML
+# tool-calling dialect under long context" (a real, if less common, failure
+# mode for small open models) until the raw request confirmed write_file
+# was never offered as a real tool in the first place. Confirmed fixed by
+# direct A/B on the identical failing prompt: with `--bare` it fails this
+# way every time; without it, write_file is present, a real tool_use call
+# is made, and the file is written correctly.
+#
+# --bare is deliberately NOT passed as of the fix above. It was added
+# because a local test run picked up ~25 extra tools/slash-commands/
+# subagents (cron_*, worktree, goal, monitor, send_message, etc.) beyond
+# the plain built-ins, which looked like unwanted ambient contamination.
+# CORRECTION: that theory (an IDE-companion socket auto-detect) was wrong --
+# re-verified against a real ALE sandbox run's own captured stdout, which
+# shows the exact same ~40-tool set. This is qwen-code's own bundled
+# extension set, auto-installed to ~/.qwen/extensions on startup in ANY
+# environment including a freshly-provisioned sandbox, not a local-only
+# artifact. --bare still should not be reintroduced, but for the simpler
+# reason above: it drops write_file (and other core built-ins), which tasks
+# genuinely need.
+#
+# FIXED BUG #2 (2026-09-24, found while re-verifying fix #1 on a second full
+# benchmark run): 6/22 tasks failed with the model's very first turn
+# producing `[API Error: 422 Failed to deserialize the JSON body into the
+# target type: tools[N].function: missing field 'parameters']` and nothing
+# else -- a hard request-level rejection, not a model or task issue.
+# Root-caused via --openai-logging: qwen-code v0.24.4's `get_goal` and
+# `list_agents` built-in tools both ship with a malformed OpenAI function
+# schema -- {"type":"function","function":{"name":...,"description":...}}
+# with NO "parameters" key at all (every other tool, including other
+# zero-argument-adjacent ones, includes "parameters" correctly, even when
+# empty). The HF router's strict deserializer rejects the WHOLE request
+# outright the moment either tool's entry is reached, so this only
+# manifested on tasks that didn't need a GUI/MCP tool list reordering to
+# push these two out of the request early (explaining why the first
+# benchmark run after fix #1 had a mix of clean successes and this new
+# failure, seemingly at random). Confirmed via 4/4 repeat local runs: fails
+# every time with both tools present, clean every time with them excluded.
+# Fixed by passing --exclude-tools get_goal,list_agents on every invocation
+# -- costs nothing, ALE tasks never use qwen-code's interactive
+# Goal-tracking or multi-agent-delegation features.
+harness: qwen_code
+model: Qwen/Qwen3.5-9B
+config:
+  base_url: https://router.huggingface.co/v1
+  api_key: ${env:HF_TOKEN}
