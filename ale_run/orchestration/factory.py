@@ -46,6 +46,7 @@ _AGENT_FQNS: dict[str, str] = {
     "terminus_2": "ale_run.agents.terminus_2.deployer.Terminus2Deployer",
     "octavus_cli": "ale_run.agents.octavus_cli.deployer.OctavusCliDeployer",
     "qwen_code": "ale_run.agents.qwen_code.deployer.QwenCodeDeployer",
+    "zcode": "ale_run.agents.zcode.deployer.ZCodeDeployer",
     "dummy": "ale_run.agents.dummy.deployer.DummyDeployer",
 }
 
