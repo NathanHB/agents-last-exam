@@ -28,7 +28,7 @@ def test_basic_shape():
     builder.add_step(
         "agent",
         message="hi!",
-        metrics=StepMetrics(input_tokens=10, output_tokens=2, cost_usd=0.001),
+        metrics=StepMetrics(prompt_tokens=10, completion_tokens=2, cost_usd=0.001),
     )
     traj = builder.finalize(reward=1.0, status="completed")
 
@@ -49,10 +49,13 @@ def test_basic_shape():
     assert out["steps"][1]["metrics"] == {"prompt_tokens": 10, "completion_tokens": 2, "cost_usd": 0.001}
 
 
-def test_metrics_only_on_agent_steps():
-    """ATIF forbids `metrics` on non-agent steps; this must never happen."""
+def test_metrics_are_dropped_from_non_agent_steps():
+    """Several deployers deliberately attach metrics to a 'system' step for
+    usage reconciliation (e.g. claude_code, pi_cli, zcode...) -- that's
+    legitimate ALE-internal bookkeeping, but ATIF forbids metrics on
+    non-agent steps, so to_atif must still drop it on the way out."""
     builder = _builder()
-    builder.add_step("system", message="note", metrics=StepMetrics(input_tokens=5))
+    builder.add_step("system", message="note", metrics=StepMetrics(prompt_tokens=5))
     traj = builder.finalize(reward=0.0)
 
     out = to_atif(traj)
@@ -68,12 +71,12 @@ def test_split_observation_is_merged_onto_the_tool_call_step():
     builder = _builder()
     builder.add_step(
         "agent",
-        tool_calls=[ToolCall(id="call_1", name="read", arguments={"path": "a.txt"})],
+        tool_calls=[ToolCall(tool_call_id="call_1", function_name="read", arguments={"path": "a.txt"})],
     )
     builder.add_step(
         "environment",
         observation=Observation(
-            results=[ToolResult(tool_call_id="call_1", content=[], is_error=False)]
+            results=[ToolResult(source_call_id="call_1", content=[], is_error=False)]
         ),
     )
     traj = builder.finalize(reward=1.0)
@@ -97,7 +100,7 @@ def test_orphaned_observation_is_folded_into_message_not_dropped():
     builder.add_step(
         "environment",
         observation=Observation(
-            results=[ToolResult(tool_call_id="call_ghost", content=[], is_error=True)]
+            results=[ToolResult(source_call_id="call_ghost", content=[], is_error=True)]
         ),
     )
     traj = builder.finalize(reward=0.0)
@@ -111,7 +114,7 @@ def test_orphaned_observation_is_folded_into_message_not_dropped():
 
 def test_final_metrics_field_names():
     builder = _builder()
-    builder.add_step("agent", metrics=StepMetrics(input_tokens=10, output_tokens=5, cache_read_tokens=3))
+    builder.add_step("agent", metrics=StepMetrics(prompt_tokens=10, completion_tokens=5, cached_tokens=3))
     traj = builder.finalize(reward=0.75, status="timeout")
 
     out = to_atif(traj)

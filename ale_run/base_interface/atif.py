@@ -1,23 +1,22 @@
 """Convert ALE's internal Trajectory model to ATIF-v1.8 for serialization.
 
-ALE's own trajectory schema (see :mod:`ale_run.base_interface.trajectory`) is
-already ATIF-inspired -- steps with source/message/reasoning/tool_calls/
-observation/metrics -- so turning it into real ATIF is a field rename and
-restructure, not a different representation. This module is the one place
-that does that translation; everything else in ALE (every deployer, every
-test) keeps using the internal model unchanged. See the RFC:
-https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md
-
-Two structural gaps between the two schemas:
+ALE's internal model (see :mod:`ale_run.base_interface.trajectory`) uses
+ATIF's own field names directly (``tool_call_id``, ``function_name``,
+``reasoning_content``, ``prompt_tokens``, ...), so this is mostly a
+pass-through. Two structural gaps remain, both because ALE's model is
+intentionally a little more permissive than strict ATIF:
 
 - ALE's ``source`` includes ``"environment"`` (a separate step carrying only
   an Observation, right after the agent step that issued the tool_calls).
   ATIF has no such source and requires an observation's results to resolve
-  against ``tool_calls`` on the *same* step. :func:`merge_split_observations`
+  against ``tool_calls`` on the *same* step. :func:`_merge_split_observations`
   re-attaches each result to the step that actually issued the matching
   tool call, dropping the now-empty carrier step.
-- ATIF forbids ``metrics`` on non-``"agent"`` steps; ALE's per-step metrics
-  are agent-only in practice, but this is enforced defensively.
+- ATIF forbids ``metrics`` on non-``"agent"`` steps; ALE's own ``Step`` model
+  already enforces this (see ``trajectory.py``'s ``_metrics_only_on_agent_steps``
+  validator), so this is just a defensive drop, never expected to trigger.
+
+See the RFC: https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md
 """
 from __future__ import annotations
 
@@ -38,7 +37,7 @@ def _convert_content(content: Any) -> Any:
         if ptype == "text":
             out.append({"type": "text", "text": part.get("text") or ""})
         elif ptype == "image":
-            img = part.get("image") or {}
+            img = part.get("source") or {}
             media_type = img.get("media_type") or "image/png"
             path = img.get("path") or img.get("url")
             if not path and img.get("data"):
@@ -53,8 +52,8 @@ def _convert_content(content: Any) -> Any:
 
 def _convert_tool_call(tc: dict) -> dict:
     out = {
-        "tool_call_id": tc.get("id") or tc.get("tool_call_id") or "",
-        "function_name": tc.get("name") or tc.get("function_name") or "",
+        "tool_call_id": tc.get("tool_call_id") or "",
+        "function_name": tc.get("function_name") or "",
         "arguments": tc.get("arguments") if isinstance(tc.get("arguments"), dict) else {},
     }
     if tc.get("extra"):
@@ -66,8 +65,8 @@ def _convert_observation(obs: dict) -> dict:
     results = []
     for r in obs.get("results") or []:
         out: dict[str, Any] = {}
-        if r.get("tool_call_id") is not None:
-            out["source_call_id"] = r["tool_call_id"]
+        if r.get("source_call_id") is not None:
+            out["source_call_id"] = r["source_call_id"]
         if r.get("content") is not None:
             out["content"] = _convert_content(r["content"])
         extra = dict(r.get("extra") or {})
@@ -81,12 +80,12 @@ def _convert_observation(obs: dict) -> dict:
 
 def _convert_metrics(m: dict) -> dict:
     out: dict[str, Any] = {}
-    if m.get("input_tokens") is not None:
-        out["prompt_tokens"] = m["input_tokens"]
-    if m.get("output_tokens") is not None:
-        out["completion_tokens"] = m["output_tokens"]
-    if m.get("cache_read_tokens") is not None:
-        out["cached_tokens"] = m["cache_read_tokens"]
+    if m.get("prompt_tokens") is not None:
+        out["prompt_tokens"] = m["prompt_tokens"]
+    if m.get("completion_tokens") is not None:
+        out["completion_tokens"] = m["completion_tokens"]
+    if m.get("cached_tokens") is not None:
+        out["cached_tokens"] = m["cached_tokens"]
     if m.get("cost_usd") is not None:
         out["cost_usd"] = m["cost_usd"]
     extra = {}
@@ -112,13 +111,14 @@ def _convert_step(s: dict) -> dict:
     }
     if s.get("timestamp"):
         out["timestamp"] = s["timestamp"]
-    if s.get("reasoning"):
-        out["reasoning_content"] = s["reasoning"]
+    if s.get("reasoning_content"):
+        out["reasoning_content"] = s["reasoning_content"]
     if s.get("tool_calls"):
         out["tool_calls"] = [_convert_tool_call(tc) for tc in s["tool_calls"]]
     if s.get("observation"):
         out["observation"] = _convert_observation(s["observation"])
-    # ATIF: metrics only valid on source="agent" steps.
+    # ATIF: metrics only valid on source="agent" steps (defensive; ALE's own
+    # Step model already forbids this combination at construction time).
     if s.get("metrics") and source == "agent":
         metrics = _convert_metrics(s["metrics"])
         if metrics:
@@ -209,12 +209,12 @@ def _convert_agent(agent: dict) -> dict:
 
 def _convert_final_metrics(fm: dict) -> dict:
     out: dict[str, Any] = {}
-    if fm.get("total_input_tokens") is not None:
-        out["total_prompt_tokens"] = fm["total_input_tokens"]
-    if fm.get("total_output_tokens") is not None:
-        out["total_completion_tokens"] = fm["total_output_tokens"]
-    if fm.get("total_cache_read_tokens") is not None:
-        out["total_cached_tokens"] = fm["total_cache_read_tokens"]
+    if fm.get("total_prompt_tokens") is not None:
+        out["total_prompt_tokens"] = fm["total_prompt_tokens"]
+    if fm.get("total_completion_tokens") is not None:
+        out["total_completion_tokens"] = fm["total_completion_tokens"]
+    if fm.get("total_cached_tokens") is not None:
+        out["total_cached_tokens"] = fm["total_cached_tokens"]
     if fm.get("total_cost_usd") is not None:
         out["total_cost_usd"] = fm["total_cost_usd"]
     if fm.get("total_steps") is not None:
