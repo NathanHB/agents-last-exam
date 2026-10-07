@@ -13,11 +13,21 @@
   <article class="article">
     <h1>Trajectory schema (ALE-v1.0)</h1>
     <p class="lede">
-      The canonical record ALE emits for every run. Each agent's deployer
+      The canonical record ALE builds for every run. Each agent's deployer
       translates its native logs into this shape, so every run reads the same way
       regardless of the harness underneath. This page is the field-by-field
-      specification.
+      specification of that <strong>internal</strong> model.
     </p>
+
+    <div class="note">
+      <div class="note-title">What actually gets written to disk</div>
+      <code>trajectory.json</code> is <strong>not</strong> this schema — it's this
+      model converted to real <a href="https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md">ATIF-v1.8</a>
+      at serialization time (<code>ale_run/base_interface/atif.py</code>), so the
+      file on disk is a standard, externally-consumable interchange format.
+      Deployers still populate the ALE-v1.0 model below via
+      <code>TrajectoryBuilder</code> — only the final write changed.
+    </div>
 
     <h2>Conventions</h2>
     <ul>
