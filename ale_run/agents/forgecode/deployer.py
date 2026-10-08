@@ -615,15 +615,15 @@ class ForgecodeDeployer(BaseAgentDeployer):
         builder.trajectory.extra.setdefault("forgecode", {})["usage"] = usage_summary
 
         # Route the dump-aggregated usage into a StepMetrics so finalize()
-        # sums it. forge's per-message ``usage.prompt_tokens`` is the full
-        # input (cache_read inclusive), so uncached = prompt - cached. Forge
-        # reports cost via usage.cost.
+        # sums it. forge's per-message ``usage.prompt_tokens`` is already the
+        # full input (cache_read inclusive), matching ATIF's prompt_tokens
+        # semantics -- pass it through as-is. Forge reports cost via usage.cost.
         if total_input_tokens or total_output_tokens or cost_seen:
             builder.add_step(
                 source="system",
                 message=None,
                 metrics=StepMetrics(
-                    prompt_tokens=max(total_input_tokens - total_cached_tokens, 0),
+                    prompt_tokens=total_input_tokens or None,
                     completion_tokens=total_output_tokens,
                     cached_tokens=total_cached_tokens or None,
                     cost_usd=total_cost if cost_seen else None,

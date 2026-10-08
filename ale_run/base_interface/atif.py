@@ -123,8 +123,16 @@ def _convert_step(s: dict) -> dict:
         metrics = _convert_metrics(s["metrics"])
         if metrics:
             out["metrics"] = metrics
-    if s.get("extra"):
-        out["extra"] = s["extra"]
+    extra = dict(s.get("extra") or {})
+    # ATIF's Observation has no top-level `error` field (only per-result
+    # is_error) -- ALE's does, for an environment-level failure with no
+    # specific result to attach it to. Observation forbids unknown keys, but
+    # Step's own extra doesn't, so lift it there rather than drop it.
+    obs_error = (s.get("observation") or {}).get("error")
+    if obs_error:
+        extra["observation_error"] = obs_error
+    if extra:
+        out["extra"] = extra
     return out
 
 
@@ -163,9 +171,21 @@ def _merge_split_observations(steps: list[dict]) -> list[dict]:
             # ATIF forbids an unresolvable source_call_id, so fold the
             # content into this step's message instead of dropping it.
             content = result.get("content")
-            text = content if isinstance(content, str) else None
-            if text is None and isinstance(content, list):
-                text = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                parts = []
+                for p in content:
+                    if not isinstance(p, dict):
+                        continue
+                    if p.get("type") == "text":
+                        parts.append(p.get("text") or "")
+                    elif p.get("type") == "image":
+                        path = (p.get("source") or {}).get("path") or ""
+                        parts.append(f"[image: {path}]" if path else "[image]")
+                text = " ".join(parts)
+            else:
+                text = None
             orphan_text.append(f"[orphaned observation for {target!r}] {text or ''}".strip())
         if leftover:
             st["observation"]["results"] = leftover
@@ -183,6 +203,7 @@ def _merge_split_observations(steps: list[dict]) -> list[dict]:
             and not st.get("reasoning_content")
             and not st.get("tool_calls")
             and not st.get("metrics")
+            and not st.get("extra")
         ):
             drop.add(i)
 

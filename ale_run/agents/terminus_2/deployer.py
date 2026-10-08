@@ -501,6 +501,9 @@ class Terminus2Deployer(BaseAgentDeployer):
 
     @staticmethod
     def _step_metrics(metrics: dict) -> StepMetrics | None:
+        """terminus_2's own trajectory.json is already real ATIF, so ``prompt_tokens``
+        here is already the full total (cached tokens included) -- pass it through
+        as-is rather than subtracting ``cached_tokens`` back out of it."""
         if not metrics:
             return None
         prompt = metrics.get("prompt_tokens")
@@ -509,11 +512,8 @@ class Terminus2Deployer(BaseAgentDeployer):
         cost = metrics.get("cost_usd")
         if prompt is None and completion is None and cost is None:
             return None
-        uncached = None
-        if prompt is not None:
-            uncached = max(prompt - (cached or 0), 0)
         return StepMetrics(
-            prompt_tokens=uncached,
+            prompt_tokens=prompt,
             completion_tokens=completion,
             cached_tokens=cached,
             cost_usd=cost,

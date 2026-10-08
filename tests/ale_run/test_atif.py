@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from ale_run.base_interface.atif import ATIF_VERSION, to_atif
 from ale_run.base_interface.trajectory import (
+    ContentPart,
+    ImageSource,
     Observation,
     StepMetrics,
     ToolCall,
@@ -110,6 +112,51 @@ def test_orphaned_observation_is_folded_into_message_not_dropped():
     assert len(out["steps"]) == 1
     assert "call_ghost" in out["steps"][0]["message"]
     assert "observation" not in out["steps"][0]
+
+
+def test_orphaned_observation_preserves_image_reference():
+    """A screenshot captured by a CUA-style tool must not vanish just because
+    its observation ended up orphaned -- folding to text must still mention
+    the image path, not only the sibling text part."""
+    builder = _builder()
+    builder.add_step(
+        "environment",
+        observation=Observation(
+            results=[
+                ToolResult(
+                    source_call_id="call_ghost",
+                    content=[
+                        ContentPart(type="text", text="captured"),
+                        ContentPart(
+                            type="image",
+                            source=ImageSource(type="path", path="screenshots/0000.png"),
+                        ),
+                    ],
+                    is_error=False,
+                )
+            ]
+        ),
+    )
+    traj = builder.finalize(reward=0.0)
+
+    out = to_atif(traj)
+
+    assert "screenshots/0000.png" in out["steps"][0]["message"]
+
+
+def test_observation_level_error_is_preserved_on_step_extra():
+    """ATIF's Observation has no top-level `error` field (and forbids unknown
+    keys), unlike ALE's -- the value must move somewhere, not vanish."""
+    builder = _builder()
+    builder.add_step(
+        "environment",
+        observation=Observation(results=[], error="sandbox timed out"),
+    )
+    traj = builder.finalize(reward=0.0)
+
+    out = to_atif(traj)
+
+    assert out["steps"][0]["extra"]["observation_error"] == "sandbox timed out"
 
 
 def test_final_metrics_field_names():

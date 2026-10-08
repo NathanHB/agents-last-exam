@@ -616,8 +616,11 @@ class GeminiCliDeployer(BaseAgentDeployer):
 
         if not saw_any:
             return None
+        # Gemini's own usage metadata reports input_tokens/promptTokenCount as
+        # the full input already inclusive of cached tokens -- pass it through
+        # as-is to match ATIF's prompt_tokens semantics (not uncached-only).
         return StepMetrics(
-            prompt_tokens=max(input_total - cache_total, 0),
+            prompt_tokens=input_total or None,
             completion_tokens=output_total,
             cached_tokens=cache_total or None,
         )
